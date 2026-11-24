@@ -6,6 +6,7 @@ import Magnet from './rb/Magnet';
 import SpotlightCard from './rb/SpotlightCard';
 import FlowingMenu from './rb/FlowingMenu';
 import * as C from './content';
+import { deliver } from './lib/notify';
 
 const Arrow = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
@@ -546,17 +547,22 @@ function Reel({ open, onClose }) {
 /* ---------------- Booking ---------------- */
 function Booking() {
   const [f, setF] = useState({ name: '', email: '', phone: '', service: 'DJing', date: '', unknown: false, place: '', length: '', sound: 'Nevím', msg: '' });
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState('');
+  const [busy, setBusy] = useState(false);
+  const born = useRef(Date.now());
   const set = k => e => setF(s => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
-  const submit = e => {
+  const submit = async e => {
     e.preventDefault();
+    // ochrana proti robotům: skryté pole a příliš rychlé odeslání
+    if (e.currentTarget.website?.value || Date.now() - born.current < 2500) { setSent('ok'); return; }
     const body = [
       `Jméno: ${f.name}`, `E-mail: ${f.email}`, `Telefon: ${f.phone || '—'}`,
       `Služba: ${f.service}`, `Termín: ${f.unknown || !f.date ? 'zatím nevím' : f.date}`, `Místo: ${f.place || '—'}`,
       `Délka vystoupení: ${f.length || '—'}`, `Zvuková aparatura: ${f.sound}`, '', f.msg
     ].join('\n');
-    window.location.href = `mailto:${C.contact.email}?subject=${encodeURIComponent(`Poptávka: ${f.service} – ${f.name}`)}&body=${encodeURIComponent(body)}`;
-    setSent(true);
+    setBusy(true);
+    setSent(await deliver(C.contact.email, `Web: poptávka ${f.service} – ${f.name}`, body, { name: f.name, email: f.email }));
+    setBusy(false);
   };
   return (
     <section className="book" id="booking">
@@ -572,6 +578,7 @@ function Booking() {
           </div>
         </div>
         <form className="form" onSubmit={submit}>
+          <input name="website" tabIndex="-1" autoComplete="off" aria-hidden="true" style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
           <fieldset className="form__svc">
             <legend>Co potřebuješ?</legend>
             {C.booking.services.map(s => (
@@ -599,8 +606,9 @@ function Booking() {
             </label>
           </div>
           <label className="fld"><span>Tvoje představa o akci</span><textarea rows="4" value={f.msg} onChange={set('msg')} placeholder="Typ akce, počet hostů, atmosféra…" /></label>
-          <button className="btn btn--full" type="submit">Odeslat nezávaznou poptávku <Arrow /></button>
-          {sent && <p className="form__ok">Otevřel se ti e-mail s připravenou poptávkou. Stačí ho odeslat.</p>}
+          <button className="btn btn--full" type="submit" disabled={busy}>{busy ? 'Odesílám…' : <>Odeslat nezávaznou poptávku <Arrow /></>}</button>
+          {sent === 'ok' && <p className="form__ok" role="status">Děkuji, poptávka je odeslaná. Ozvu se ti co nejdřív na tvůj e-mail.</p>}
+          {sent === 'mail' && <p className="form__ok" role="status">Otevřel se ti e-mail s připravenou poptávkou. Stačí ho odeslat.</p>}
         </form>
       </div>
     </section>
